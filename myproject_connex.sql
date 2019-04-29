@@ -602,4 +602,109 @@ BEGIN
   FROM   dual;
 END;
 
-/********************  Integrity Laws*****************/
+/********************  Integrity Laws & test*****************/
+                                    
+                                    set serveroutput on
+create or replace trigger trigger_anEd before insert on catalogue 
+for each row
+
+begin
+if :new.anEd < 1950 then
+    raise_application_error(-20104,'La date doit etre >1950 !! ');
+end if;
+end;
+
+INSERT INTO Catalogue VALUES (123, 'TP Base de donnees','aaa','bbb',1949,'atlas',70);
+
+
+
+
+set serveroutput on
+create or replace trigger trigger_annne_emprunt before insert on emprunt 
+for each row
+begin
+if :new.dateRprevue < sysdate then
+    raise_application_error(-20105,'La date d’emprunt (date système) doit être précédente à celle de retour !! ');
+end if;
+end;
+
+insert into emprunt values('BDD_03','10/5/2018',11,'20/5/2018',NULL);
+
+
+
+
+
+set serveroutput on
+create or replace trigger trigger_adh_emprunt before insert on emprunt 
+for each row
+declare
+nb numeric;
+begin
+select count(noAdh) into nb from Adherent where noadh=:new.noadh;
+if nb=0 then
+    raise_application_error(-20105,'On ne peut emprunter un titre qu’après avoir adhéré à la bibliothèque. 
+    (La date d’adhésion est antérieure ouégale à celle de l’emprunt) !! ');
+end if;
+end;
+
+insert into emprunt values('BDD_03','10/4/2019',343,'20/4/2019',NULL);
+
+
+
+
+
+create or replace procedure updateEmrpuntExemplaire is
+    cursor e is (select * from emprunt where dateRprevue-dateEmp>31);
+    Vemrpunt emprunt%ROWTYPE;
+begin
+    open e;
+    loop
+    fetch e into Vemrpunt;
+    update exemplaire set disp='non' where codexp=Vemrpunt.codexp;
+    end loop;
+    commit;
+end updateEmrpuntExemplaire;
+
+BEGIN
+    DBMS_SCHEDULER.CREATE_JOB (
+       job_name             => 'update_exp_to_no_after_month',
+       job_type             => 'PLSQL_BLOCK',
+       job_action           => 'BEGIN denyAccess; END;',
+       start_date           =>  sysdate,
+       repeat_interval      => 'FREQ=DAILY',
+       enabled              =>  TRUE,
+       comments             => 'Revoke expired penalties');
+END;
+
+create or replace trigger emp_lst before insert on emprunt 
+for each row
+declare
+nb numeric;
+cdg number;
+nb1 numeric;
+begin
+    select count (DISTINCT codeg) into nb from emprunt e,exemplaire ex
+    where e.codexp=ex.codexp ;
+    if nb >=5 then
+     raise_application_error(-20105,'Un adhérent ne peut emprunter qu’au plus 5 titres');
+     else
+     select codeg into cdg from exemplaire where codexp=:new.codexp;
+     select count(emprunt.codexp)  into nb1 from emprunt ,exemplaire where emprunt.noadh=:new.noadh 
+     and emprunt.codexp=:new.codexp and emprunt.codexp=exemplaire.codexp and exemplaire.codeg=cdg;
+     if nb1>0 then
+             raise_application_error(-20106,'Un adhérent ne peut emprunter qu’un seul exemplaire pour chaque titre');
+
+     end if;
+    end if;
+end;
+
+select * from emprunt;
+insert into emprunt values('BDD_03','28/4/2019',11,'11/5/2019',NULL);
+
+
+CREATE  INDEX adherent_index ON adherent(noadh) ;
+CREATE  INDEX catalogue_index ON catalogue(codeg) ;
+CREATE  INDEX exemplaire_index ON exemplaire(noadh) ;
+CREATE  INDEX emprunt_index ON emprunt(codexp,dateEmp) ;
+
+
