@@ -1,3 +1,5 @@
 *.java linguist-vendored=true
 *.js linguist-vendored=false
+*.sql linguist-vendored=false
+
 
